@@ -1,26 +1,154 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg-primary: #0f0f1a;
+  --bg-secondary: #1a1a2e;
+  --bg-tertiary: #252540;
+  --bg-elevated: #2a2a45;
+  --text-primary: #e8e6e3;
+  --text-secondary: #9898a8;
+  --text-muted: #6b6b80;
+  --accent: #c9a96e;
+  --accent-hover: #d4b87a;
+  --accent-muted: rgba(201, 169, 110, 0.15);
+  --border-color: #2a2a40;
+  --danger: #e0556a;
+  --success: #5ec49e;
+  --info: #6eb5c9;
+  --editor-font: 'Source Serif 4', 'Noto Serif SC', Georgia, serif;
+  --ui-font: 'Inter', system-ui, sans-serif;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+  --color-bg-elevated: var(--bg-elevated);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-border-color: var(--border-color);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--ui-font);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-elevated);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Editor Styles */
+.ProseMirror {
+  outline: none;
+  min-height: 100%;
+  padding: 2rem 3rem;
+  font-family: var(--editor-font);
+  font-size: 1.125rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+}
+
+.ProseMirror p {
+  margin-bottom: 0.75em;
+}
+
+.ProseMirror h1 { font-size: 1.875rem; font-weight: 700; margin: 1.5em 0 0.5em; }
+.ProseMirror h2 { font-size: 1.5rem; font-weight: 600; margin: 1.25em 0 0.5em; }
+.ProseMirror h3 { font-size: 1.25rem; font-weight: 600; margin: 1em 0 0.5em; }
+
+.ProseMirror .ai-suggestion {
+  background: var(--accent-muted);
+  border-bottom: 2px solid var(--accent);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.ProseMirror .ai-suggestion:hover {
+  background: rgba(201, 169, 110, 0.25);
+}
+
+.ProseMirror blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 1rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  margin: 0.75em 0;
+}
+
+.ProseMirror .character-mention {
+  color: var(--accent);
+  font-weight: 500;
+  background: var(--accent-muted);
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+}
+
+/* Placeholder */
+.ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--text-muted);
+  pointer-events: none;
+  height: 0;
+}
+
+/* Floating menu */
+.floating-menu {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 4px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.floating-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+  background: transparent;
+  font-family: var(--ui-font);
+}
+
+.floating-menu button:hover,
+.floating-menu button.is-active {
+  background: var(--accent-muted);
+  color: var(--accent);
 }
