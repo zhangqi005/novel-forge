@@ -50,10 +50,10 @@ export default function Home() {
     };
 
     const actionPrompts: Record<string, string> = {
-      polish: '请对以下文本进行润色，提升语言表现力，增加感官细节，优化句式节奏。给出润色后的版本并简要说明改动：',
-      expand: '请对以下文本进行扩写，增加环境描写、内心活动和细节层次，在不改变原意的前提下扩展到约2倍长度：',
-      shorten: '请精简以下文本，去除冗余修饰，合并重复表达，在保留核心信息的前提下减少约30%字数：',
-      rewrite: '请用完全不同的语言风格重写以下文本。提供两个版本：一种偏诗意（多用比喻意象），一种偏干脆（短句为主节奏快）：',
+      polish: '请对以下文本进行润色，提升语言表现力，增加感官细节，优化句式节奏。先简要说明改动（1-2句），然后将润色后的完整文本放在 ``` 代码块中：',
+      expand: '请对以下文本进行扩写，增加环境描写、内心活动和细节层次，在不改变原意的前提下扩展到约2倍长度。先简要说明（1-2句），然后将扩写后的完整文本放在 ``` 代码块中：',
+      shorten: '请精简以下文本，去除冗余修饰，合并重复表达，在保留核心信息的前提下减少约30%字数。将精简后的完整文本放在 ``` 代码块中：',
+      rewrite: '请用完全不同的语言风格重写以下文本。提供两个版本：一种偏诗意（多用比喻意象），一种偏干脆（短句为主节奏快）。每个版本分别放在单独的 ``` 代码块中：',
       discuss: '请对以下文本给出具体的修改建议，包括节奏、角色动机、语言表现、是否有埋伏笔的机会等方面：',
     };
 
@@ -126,6 +126,13 @@ export default function Home() {
     setSelectedRange(null);
   }, [selectedRange]);
 
+  const handleCompareEdit = useCallback((newText: string) => {
+    if (!selectedRange) return;
+    editorRef.current?.insertComparison(selectedRange.to, newText);
+    setSelectedText('');
+    setSelectedRange(null);
+  }, [selectedRange]);
+
   const handleExportAll = useCallback(() => {
     const chapters = workspace.chapters.sort((a, b) => a.chapterNumber - b.chapterNumber);
     const workTitle = workspace.works.find((w) => w.id === workspace.currentWorkId)?.title || '作品';
@@ -169,7 +176,7 @@ export default function Home() {
       <PanelResizer direction="horizontal" onResize={(delta) => setRightPanelWidth(rightPanelWidth - delta)} />
 
       <div style={{ width: rightPanelWidth }} className="flex-shrink-0 h-full">
-        <ChatPanel editorContent={editorContent} selectedText={selectedText} onApplyEdit={handleApplyEdit} />
+        <ChatPanel editorContent={editorContent} selectedText={selectedText} onApplyEdit={handleApplyEdit} onCompareEdit={handleCompareEdit} />
       </div>
 
       <NewWorkModal isOpen={showNewWork} onClose={() => setShowNewWork(false)} />

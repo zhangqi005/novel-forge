@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { useCharacters } from '@/store/useCharacters';
 import { useWorks } from '@/store/useWorks';
-import { Plus, Search, User, Heart, Swords, Users2, Save, X, Link2 } from 'lucide-react';
-import type { CharacterCard, Relationship } from '@/types';
+import { Plus, Search, User, Heart, Swords, Users2, Save, X, Link2, Sparkles } from 'lucide-react';
+import { tiptapToText } from '@/lib/export';
+import type { CharacterCard } from '@/types';
 
 const roleLabels: Record<string, string> = { protagonist: '主角', antagonist: '反派', supporting: '配角', cameo: '客串' };
 const roleColors: Record<string, string> = { protagonist: 'var(--accent)', antagonist: 'var(--danger)', supporting: 'var(--info)', cameo: 'var(--text-muted)' };
@@ -12,14 +13,16 @@ const roleIcons: Record<string, React.ReactNode> = { protagonist: <User size={14
 const relTypes = ['家人', '朋友', '恋人', '仇敌', '师徒', '同门', '盟友', '其他'];
 
 export default function CharactersView() {
-  const { characters, selectedId, loadCharacters, selectCharacter, addCharacter, updateCharacter, removeCharacter } = useCharacters();
+  const { characters, selectedId, isExtracting, loadCharacters, selectCharacter, addCharacter, updateCharacter, removeCharacter, extractFromChapters } = useCharacters();
   const currentWorkId = useWorks((s) => s.currentWorkId);
+  const chapters = useWorks((s) => s.chapters);
   const [search, setSearch] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<CharacterCard | null>(null);
   const [newRelTarget, setNewRelTarget] = useState('');
   const [newRelType, setNewRelType] = useState('朋友');
   const [newRelDesc, setNewRelDesc] = useState('');
+  const [extractResult, setExtractResult] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentWorkId) {
@@ -38,6 +41,17 @@ export default function CharactersView() {
     const ch = await addCharacter(currentWorkId);
     setEditData(ch);
     setIsEditing(true);
+  };
+
+  const handleExtract = async () => {
+    if (!currentWorkId || isExtracting) return;
+    const sorted = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
+    const allText = sorted
+      .map((ch) => `## ${ch.title}\n${tiptapToText(ch.content)}`)
+      .join('\n\n');
+    const result = await extractFromChapters(currentWorkId, allText);
+    setExtractResult(result);
+    setTimeout(() => setExtractResult(null), 4000);
   };
 
   const handleSave = async () => {
@@ -69,10 +83,28 @@ export default function CharactersView() {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
         <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">角色卡</h2>
-        <button onClick={handleAdd} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
-          <Plus size={16} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleExtract}
+            disabled={isExtracting}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-[var(--accent)] hover:bg-[var(--accent-muted)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="从正文提取角色信息"
+          >
+            <Sparkles size={13} className={isExtracting ? 'animate-pulse' : ''} />
+            {isExtracting ? '提取中...' : 'AI提取'}
+          </button>
+          <button onClick={handleAdd} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">
+            <Plus size={16} />
+          </button>
+        </div>
       </div>
+
+      {extractResult && (
+        <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--accent-muted)] text-xs text-[var(--accent)] flex items-center gap-1.5">
+          <Sparkles size={12} />
+          {extractResult}
+        </div>
+      )}
 
       {isEditing && editData ? (
         /* Edit Form */

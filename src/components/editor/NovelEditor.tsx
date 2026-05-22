@@ -14,6 +14,7 @@ import { tiptapToText, tiptapToMarkdown, downloadFile } from '@/lib/export';
 
 export interface NovelEditorHandle {
   replaceTextAt: (from: number, to: number, newText: string) => void;
+  insertComparison: (at: number, suggestedText: string) => void;
 }
 
 interface NovelEditorProps {
@@ -100,6 +101,20 @@ const NovelEditor = forwardRef<NovelEditorHandle, NovelEditorProps>(function Nov
   useImperativeHandle(ref, () => ({
     replaceTextAt: (from: number, to: number, newText: string) => {
       editor?.chain().focus().setTextSelection({ from, to }).insertContent(newText).run();
+    },
+    insertComparison: (at: number, suggestedText: string) => {
+      if (!editor) return;
+      const separator = '\n\n✨ AI建议版本：\n';
+      const fullContent = separator + suggestedText;
+
+      editor.chain()
+        .focus()
+        .setTextSelection(at)
+        .insertContent(fullContent)
+        .setTextSelection({ from: at + separator.length, to: at + fullContent.length })
+        .setHighlight({ color: '#b37400' })
+        .setTextSelection(at + fullContent.length)
+        .run();
     },
   }), [editor]);
 

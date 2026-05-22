@@ -130,12 +130,12 @@ export default function ChaptersPanel() {
                   }`} />
                 </div>
               </div>
-              <button
+              <span
                 onClick={(e) => { e.stopPropagation(); deleteChapter(ch.id); }}
-                className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--bg-tertiary)] transition-all"
+                className="opacity-0 group-hover:opacity-100 p-1 rounded text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--bg-tertiary)] transition-all cursor-pointer"
               >
                 <Trash2 size={14} />
-              </button>
+              </span>
             </button>
             </div>
             );

@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useOutline } from '@/store/useOutline';
 import { useWorks } from '@/store/useWorks';
+import { tiptapToText } from '@/lib/export';
 import {
   Plus, ChevronRight, ChevronDown, Trash2, Edit3,
-  BookOpen, FileText, Layout, Check, X, GripVertical, Eye, EyeOff
+  BookOpen, FileText, Layout, Check, X, GripVertical, Eye, EyeOff, Sparkles
 } from 'lucide-react';
 import type { OutlineNode, Foreshadow } from '@/types';
 
@@ -15,15 +16,16 @@ const statusColors: Record<string, string> = { planned: 'var(--text-muted)', wri
 const statusLabels: Record<string, string> = { planned: '计划', writing: '写作中', done: '已完成' };
 
 export default function OutlineView() {
-  const { outlineNodes, storylines, selectedNodeId, loadOutlines, loadStorylines, selectNode, addNode, updateNode, removeNode, reorderNode } = useOutline();
+  const { outlineNodes, storylines, selectedNodeId, isExtracting, loadOutlines, loadStorylines, selectNode, addNode, updateNode, removeNode, reorderNode, extractFromChapters } = useOutline();
   const currentWorkId = useWorks((s) => s.currentWorkId);
+  const chapters = useWorks((s) => s.chapters);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editSummary, setEditSummary] = useState('');
   const [editStatus, setEditStatus] = useState<OutlineNode['status']>('planned');
   const [editForeshadows, setEditForeshadows] = useState<Foreshadow[]>([]);
-  const chapters = useWorks((s) => s.chapters);
+  const [extractResult, setExtractResult] = useState<string | null>(null);
   const [dragNodeId, setDragNodeId] = useState<string | null>(null);
   const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
   const [dragPosition, setDragPosition] = useState<'above' | 'below'>('below');
@@ -120,6 +122,17 @@ export default function OutlineView() {
     setDragNodeId(null);
     setDragOverNodeId(null);
   }, []);
+
+  const handleExtract = async () => {
+    if (!currentWorkId || isExtracting) return;
+    const sorted = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
+    const allText = sorted
+      .map((ch) => `## ${ch.title}\n${tiptapToText(ch.content)}`)
+      .join('\n\n');
+    const result = await extractFromChapters(currentWorkId, allText);
+    setExtractResult(result);
+    setTimeout(() => setExtractResult(null), 4000);
+  };
 
   const handleAdd = async (parentId: string | null, type: OutlineNode['type']) => {
     if (!currentWorkId) return;
@@ -379,6 +392,15 @@ export default function OutlineView() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border-color)]">
         <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">大纲</h2>
         <div className="flex items-center gap-0.5">
+          <button
+            onClick={handleExtract}
+            disabled={isExtracting}
+            className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-[var(--accent)] hover:bg-[var(--accent-muted)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            title="从正文自动补充大纲"
+          >
+            <Sparkles size={13} className={isExtracting ? 'animate-pulse' : ''} />
+            {isExtracting ? '分析中...' : 'AI补充'}
+          </button>
           <button onClick={() => handleAdd(null, 'volume')} className="p-1.5 rounded-md hover:bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors" title="添加卷">
             <BookOpen size={14} />
           </button>
@@ -387,6 +409,13 @@ export default function OutlineView() {
           </button>
         </div>
       </div>
+
+      {extractResult && (
+        <div className="px-4 py-2 border-b border-[var(--border-color)] bg-[var(--accent-muted)] text-xs text-[var(--accent)] flex items-center gap-1.5">
+          <Sparkles size={12} />
+          {extractResult}
+        </div>
+      )}
 
       <div className="flex-1 overflow-y-auto py-2">
         {outlineNodes.length === 0 ? (

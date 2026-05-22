@@ -13,9 +13,10 @@ interface ChatPanelProps {
   editorContent?: string;
   selectedText?: string;
   onApplyEdit?: (newText: string) => void;
+  onCompareEdit?: (newText: string) => void;
 }
 
-export default function ChatPanel({ editorContent, selectedText, onApplyEdit }: ChatPanelProps) {
+export default function ChatPanel({ editorContent, selectedText, onApplyEdit, onCompareEdit }: ChatPanelProps) {
   const { messages, isStreaming, editContext, addMessage, updateLastMessage, setStreaming, setEditContext, setAbortController: storeAbortCtrl } = useChat();
   const { chatMode, setChatMode } = useWorkspace();
   const characters = useCharacters((s) => s.characters);
@@ -286,6 +287,20 @@ export default function ChatPanel({ editorContent, selectedText, onApplyEdit }: 
                         >
                           采纳
                         </button>
+                        {onCompareEdit && (() => {
+                          const suggested = parseSuggestedText(msg.content);
+                          return suggested ? (
+                            <button
+                              onClick={() => {
+                                onCompareEdit(suggested);
+                                setEditContext(null);
+                              }}
+                              className="flex-1 py-1.5 rounded-lg bg-[var(--bg-primary)] text-[var(--accent)] text-xs font-medium hover:bg-[var(--accent-muted)] transition-colors"
+                            >
+                              对比
+                            </button>
+                          ) : null;
+                        })()}
                         <button
                           onClick={() => setEditContext(null)}
                           className="flex-1 py-1.5 rounded-lg bg-[var(--bg-primary)] text-[var(--text-muted)] text-xs hover:text-[var(--text-primary)] transition-colors"
