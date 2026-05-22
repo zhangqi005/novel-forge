@@ -6,6 +6,7 @@ import CharactersView from '@/components/characters/CharactersView';
 import OutlineView from '@/components/outline/OutlineView';
 import StorylinesView from '@/components/outline/StorylinesView';
 import DiscussionView from '@/components/discussion/DiscussionView';
+import StatsView from '@/components/stats/StatsView';
 
 export default function LeftPanel() {
   const { leftPanelView } = useWorkspace();
@@ -17,6 +18,7 @@ export default function LeftPanel() {
       case 'outline': return <OutlineView />;
       case 'storylines': return <StorylinesView />;
       case 'discussion': return <DiscussionView />;
+      case 'stats': return <StatsView />;
       default: return <ChaptersPanel />;
     }
   };

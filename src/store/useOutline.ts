@@ -14,6 +14,7 @@ interface OutlineStore {
   addNode: (workId: string, parentId: string | null, type: OutlineNode['type']) => Promise<OutlineNode>;
   updateNode: (node: OutlineNode) => Promise<void>;
   removeNode: (id: string) => Promise<void>;
+  reorderNode: (nodeId: string, newParentId: string | null, newIndex: number) => Promise<void>;
   addStoryline: (workId: string) => Promise<Storyline>;
   updateStoryline: (sl: Storyline) => Promise<void>;
   removeStoryline: (id: string) => Promise<void>;
@@ -72,6 +73,36 @@ export const useOutline = create<OutlineStore>((set, get) => ({
     set((s) => ({
       outlineNodes: s.outlineNodes.filter((n) => n.id !== id && !descendants.has(n.id)),
       selectedNodeId: s.selectedNodeId === id ? null : s.selectedNodeId,
+    }));
+  },
+
+  reorderNode: async (nodeId, newParentId, newIndex) => {
+    const { outlineNodes } = get();
+    const node = outlineNodes.find((n) => n.id === nodeId);
+    if (!node) return;
+
+    const siblings = outlineNodes
+      .filter((n) => n.parentId === newParentId && n.id !== nodeId)
+      .sort((a, b) => a.order - b.order);
+
+    const reordered: OutlineNode[] = [];
+    for (const sibling of siblings) {
+      if (reordered.length === newIndex) {
+        reordered.push({ ...node, parentId: newParentId, order: newIndex });
+      }
+      reordered.push({ ...sibling, order: reordered.length });
+    }
+    if (reordered.length <= newIndex) {
+      reordered.push({ ...node, parentId: newParentId, order: reordered.length });
+    }
+
+    await Promise.all(reordered.map((n) => db.saveOutline(n)));
+
+    set((s) => ({
+      outlineNodes: s.outlineNodes.map((n) => {
+        const updated = reordered.find((r) => r.id === n.id);
+        return updated || n;
+      }),
     }));
   },
 

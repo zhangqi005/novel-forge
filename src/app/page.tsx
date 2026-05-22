@@ -5,12 +5,14 @@ import Sidebar from '@/components/layout/Sidebar';
 import LeftPanel from '@/components/layout/LeftPanel';
 import PanelResizer from '@/components/layout/PanelResizer';
 import NovelEditor from '@/components/editor/NovelEditor';
+import type { NovelEditorHandle } from '@/components/editor/NovelEditor';
 import ChatPanel from '@/components/chat/ChatPanel';
 import NewWorkModal from '@/components/common/NewWorkModal';
 import { useWorkspace } from '@/store/useWorkspace';
 import { useChat } from '@/store/useChat';
 import { useWorks } from '@/store/useWorks';
 import { streamAIResponse } from '@/lib/ai';
+import { tiptapToText, downloadFile } from '@/lib/export';
 
 export default function Home() {
   const {
@@ -18,11 +20,13 @@ export default function Home() {
     rightPanelWidth, setRightPanelWidth,
     chatMode,
   } = useWorkspace();
-  const { messages, addMessage, setStreaming, setAbortController, updateLastMessage } = useChat();
+  const { messages, addMessage, setStreaming, setAbortController, updateLastMessage, setEditContext } = useChat();
   const workspace = useWorks();
   const abortRef = useRef<AbortController | null>(null);
+  const editorRef = useRef<NovelEditorHandle>(null);
   const [editorContent, setEditorContent] = useState('');
   const [selectedText, setSelectedText] = useState('');
+  const [selectedRange, setSelectedRange] = useState<{ from: number; to: number } | null>(null);
   const [showNewWork, setShowNewWork] = useState(false);
 
   const currentChapter = workspace.chapters.find((ch) => ch.id === workspace.currentChapterId);
@@ -39,7 +43,7 @@ export default function Home() {
     }
   }, [workspace.currentWorkId]);
 
-  const handleAIAction = useCallback(async (action: string, text: string) => {
+  const handleAIAction = useCallback(async (action: string, text: string, from: number, to: number) => {
     const actionLabels: Record<string, string> = {
       polish: '润色', expand: '扩写', shorten: '精简',
       rewrite: '换个写法', discuss: '给建议',
@@ -58,7 +62,11 @@ export default function Home() {
       ? `${prompt}\n\n---\n${text}\n---`
       : `请对当前章节内容给出【${actionLabels[action] || action}】建议`;
 
-    if (text) setSelectedText(text);
+    if (text) {
+      setSelectedText(text);
+      setSelectedRange({ from, to });
+      setEditContext({ originalText: text, action });
+    }
 
     addMessage('user', userMsg);
     setStreaming(true);
@@ -111,6 +119,28 @@ export default function Home() {
     }
   }, [workspace.currentChapterId, workspace.updateChapterContent]);
 
+  const handleApplyEdit = useCallback((newText: string) => {
+    if (!selectedRange) return;
+    editorRef.current?.replaceTextAt(selectedRange.from, selectedRange.to, newText);
+    setSelectedText('');
+    setSelectedRange(null);
+  }, [selectedRange]);
+
+  const handleExportAll = useCallback(() => {
+    const chapters = workspace.chapters.sort((a, b) => a.chapterNumber - b.chapterNumber);
+    const workTitle = workspace.works.find((w) => w.id === workspace.currentWorkId)?.title || '作品';
+    const lines: string[] = [];
+    lines.push(`# ${workTitle}\n`);
+    for (const ch of chapters) {
+      const text = tiptapToText(ch.content);
+      lines.push(`## ${ch.title}\n`);
+      lines.push(text);
+      lines.push('');
+    }
+    const filename = `${workTitle.replace(/[<>:"/\\|?*]/g, '_')}.txt`;
+    downloadFile(filename, lines.join('\n'), 'text/plain');
+  }, [workspace.chapters, workspace.works, workspace.currentWorkId]);
+
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--bg-primary)]">
       <div className="w-[64px] flex-shrink-0">
@@ -125,19 +155,21 @@ export default function Home() {
 
       <div className="flex-1 flex flex-col min-w-0 h-full">
         <NovelEditor
+          ref={editorRef}
           onAIAction={handleAIAction}
           chapterId={workspace.currentChapterId}
           chapterTitle={currentChapter?.title || '未选择章节'}
           chapterContent={currentChapter?.content || null}
           onSave={handleChapterSave}
           onContentChange={handleEditorContent}
+          onExportAll={handleExportAll}
         />
       </div>
 
       <PanelResizer direction="horizontal" onResize={(delta) => setRightPanelWidth(rightPanelWidth - delta)} />
 
       <div style={{ width: rightPanelWidth }} className="flex-shrink-0 h-full">
-        <ChatPanel editorContent={editorContent} selectedText={selectedText} />
+        <ChatPanel editorContent={editorContent} selectedText={selectedText} onApplyEdit={handleApplyEdit} />
       </div>
 
       <NewWorkModal isOpen={showNewWork} onClose={() => setShowNewWork(false)} />

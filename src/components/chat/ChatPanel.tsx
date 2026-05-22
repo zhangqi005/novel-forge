@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useChat } from '@/store/useChat';
+import { useChat, parseSuggestedText } from '@/store/useChat';
 import { useWorkspace } from '@/store/useWorkspace';
 import { useCharacters } from '@/store/useCharacters';
 import { useWorks } from '@/store/useWorks';
@@ -12,10 +12,11 @@ import { Send, Mic, Sparkles, Wrench, StopCircle, AtSign } from 'lucide-react';
 interface ChatPanelProps {
   editorContent?: string;
   selectedText?: string;
+  onApplyEdit?: (newText: string) => void;
 }
 
-export default function ChatPanel({ editorContent, selectedText }: ChatPanelProps) {
-  const { messages, isStreaming, addMessage, updateLastMessage, setStreaming, setAbortController: storeAbortCtrl } = useChat();
+export default function ChatPanel({ editorContent, selectedText, onApplyEdit }: ChatPanelProps) {
+  const { messages, isStreaming, editContext, addMessage, updateLastMessage, setStreaming, setEditContext, setAbortController: storeAbortCtrl } = useChat();
   const { chatMode, setChatMode } = useWorkspace();
   const characters = useCharacters((s) => s.characters);
   const currentChapter = useWorks((s) => s.chapters.find((ch) => ch.id === s.currentChapterId));
@@ -91,6 +92,11 @@ export default function ChatPanel({ editorContent, selectedText }: ChatPanelProp
     setInput('');
     addMessage('user', text);
     setStreaming(true);
+
+    // Track edit context for later "Apply" button
+    if (selectedText) {
+      setEditContext({ originalText: selectedText, action: chatMode });
+    }
 
     const abortController = new AbortController();
     abortRef.current = abortController;
@@ -243,15 +249,53 @@ export default function ChatPanel({ editorContent, selectedText }: ChatPanelProp
                 }`}
             >
               {msg.role === 'assistant' && msg.content ? (
-                <div
-                  className="prose prose-sm prose-invert max-w-none [&_strong]:text-[var(--accent)]"
-                  dangerouslySetInnerHTML={{
-                    __html: msg.content
-                      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                      .replace(/\n\n/g, '<br/><br/>')
-                      .replace(/\n/g, '<br/>'),
-                  }}
-                />
+                <>
+                  <div
+                    className="prose prose-sm prose-invert max-w-none [&_strong]:text-[var(--accent)]"
+                    dangerouslySetInnerHTML={{
+                      __html: msg.content
+                        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                        .replace(/\n\n/g, '<br/><br/>')
+                        .replace(/\n/g, '<br/>'),
+                    }}
+                  />
+                  {/* Apply button for modification responses */}
+                  {editContext && !isStreaming && msg.id === messages[messages.length - 1]?.id && onApplyEdit && (
+                    <div className="mt-3 pt-3 border-t border-[var(--border-color)]">
+                      <div className="text-xs text-[var(--text-muted)] mb-2">
+                        原文：<span className="text-[var(--text-secondary)] line-through">{editContext.originalText.slice(0, 80)}{editContext.originalText.length > 80 ? '...' : ''}</span>
+                      </div>
+                      {(() => {
+                        const suggested = parseSuggestedText(msg.content);
+                        return suggested ? (
+                          <div className="text-xs text-[var(--text-muted)] mb-2">
+                            AI建议：<span className="text-[var(--text-primary)]">{suggested.slice(0, 80)}{suggested.length > 80 ? '...' : ''}</span>
+                          </div>
+                        ) : null;
+                      })()}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            const suggested = parseSuggestedText(msg.content);
+                            if (suggested && onApplyEdit) {
+                              onApplyEdit(suggested);
+                              setEditContext(null);
+                            }
+                          }}
+                          className="flex-1 py-1.5 rounded-lg bg-[var(--accent)] text-black text-xs font-medium hover:bg-[var(--accent-hover)] transition-colors"
+                        >
+                          采纳
+                        </button>
+                        <button
+                          onClick={() => setEditContext(null)}
+                          className="flex-1 py-1.5 rounded-lg bg-[var(--bg-primary)] text-[var(--text-muted)] text-xs hover:text-[var(--text-primary)] transition-colors"
+                        >
+                          忽略
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
               ) : msg.role === 'assistant' && !msg.content && isStreaming ? (
                 <div className="flex items-center gap-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] animate-bounce" style={{ animationDelay: '0ms' }} />

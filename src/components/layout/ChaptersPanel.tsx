@@ -2,13 +2,16 @@
 
 import { useWorks } from '@/store/useWorks';
 import { Plus, MoreHorizontal, GripVertical, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 export default function ChaptersPanel() {
-  const { chapters, currentChapterId, currentWorkId, createChapter, deleteChapter, setCurrentChapter, works } = useWorks();
+  const { chapters, currentChapterId, currentWorkId, createChapter, deleteChapter, setCurrentChapter, works, reorderChapters } = useWorks();
   const currentWork = works.find((w) => w.id === currentWorkId);
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
+  const [dragChapterId, setDragChapterId] = useState<string | null>(null);
+  const [dragOverChapterId, setDragOverChapterId] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<'above' | 'below'>('below');
 
   const totalWords = chapters.reduce((sum, ch) => sum + ch.wordCount, 0);
 
@@ -24,6 +27,49 @@ export default function ChaptersPanel() {
     const chapter = await createChapter(currentWorkId, `第${chapters.length + 1}章`);
     setCurrentChapter(chapter.id);
   };
+
+  const sortedChapters = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
+
+  const handleDragStart = useCallback((e: React.DragEvent, chapterId: string) => {
+    e.dataTransfer.setData('text/plain', chapterId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDragChapterId(chapterId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, chapterId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    setDragOverChapterId(chapterId);
+    setDragPosition(e.clientY < midY ? 'above' : 'below');
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverChapterId(null);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('text/plain');
+    if (!draggedId || draggedId === targetId) {
+      setDragChapterId(null);
+      setDragOverChapterId(null);
+      return;
+    }
+
+    const targetIndex = sortedChapters.findIndex((ch) => ch.id === targetId);
+    const newIndex = dragPosition === 'above' ? targetIndex : targetIndex + 1;
+
+    await reorderChapters(draggedId, newIndex);
+    setDragChapterId(null);
+    setDragOverChapterId(null);
+  }, [sortedChapters, dragPosition, reorderChapters]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragChapterId(null);
+    setDragOverChapterId(null);
+  }, []);
 
   return (
     <div className="flex flex-col h-full">
@@ -46,17 +92,32 @@ export default function ChaptersPanel() {
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto py-2">
-          {chapters.map((ch) => (
-            <button
-              key={ch.id}
-              onClick={() => setCurrentChapter(ch.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors group
-                ${currentChapterId === ch.id
-                  ? 'bg-[var(--accent-muted)] border-r-2 border-[var(--accent)]'
-                  : 'hover:bg-[var(--bg-tertiary)] border-r-2 border-transparent'
-                }`}
-            >
-              <GripVertical size={14} className="text-[var(--text-muted)] flex-shrink-0" />
+          {sortedChapters.map((ch) => {
+            const isDragging = dragChapterId === ch.id;
+            const isDragOver = dragOverChapterId === ch.id;
+            return (
+            <div key={ch.id}>
+              {isDragOver && dragPosition === 'above' && (
+                <div className="mx-4 h-0.5 bg-[var(--accent)] rounded-full" />
+              )}
+              <button
+                draggable
+                onDragStart={(e) => handleDragStart(e, ch.id)}
+                onDragOver={(e) => handleDragOver(e, ch.id)}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, ch.id)}
+                onDragEnd={handleDragEnd}
+                onClick={() => setCurrentChapter(ch.id)}
+                className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors group
+                  ${currentChapterId === ch.id
+                    ? 'bg-[var(--accent-muted)] border-r-2 border-[var(--accent)]'
+                    : 'hover:bg-[var(--bg-tertiary)] border-r-2 border-transparent'
+                  }
+                  ${isDragging ? 'opacity-40' : ''}
+                  ${isDragOver && dragPosition === 'below' ? 'ring-2 ring-[var(--accent)]' : ''}
+                `}
+              >
+              <GripVertical size={14} className="text-[var(--text-muted)] flex-shrink-0 cursor-grab active:cursor-grabbing" />
               <div className="flex-1 min-w-0">
                 <div className="text-sm text-[var(--text-primary)] truncate">{ch.title}</div>
                 <div className="flex items-center gap-2 mt-0.5">
@@ -76,7 +137,9 @@ export default function ChaptersPanel() {
                 <Trash2 size={14} />
               </button>
             </button>
-          ))}
+            </div>
+            );
+          })}
 
           {/* Add chapter inline */}
           {isAdding ? (

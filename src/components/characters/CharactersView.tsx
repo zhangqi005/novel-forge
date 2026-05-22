@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react';
 import { useCharacters } from '@/store/useCharacters';
 import { useWorks } from '@/store/useWorks';
-import { Plus, Search, User, Heart, Swords, Users2, Save, X } from 'lucide-react';
-import type { CharacterCard } from '@/types';
+import { Plus, Search, User, Heart, Swords, Users2, Save, X, Link2 } from 'lucide-react';
+import type { CharacterCard, Relationship } from '@/types';
 
 const roleLabels: Record<string, string> = { protagonist: '主角', antagonist: '反派', supporting: '配角', cameo: '客串' };
 const roleColors: Record<string, string> = { protagonist: 'var(--accent)', antagonist: 'var(--danger)', supporting: 'var(--info)', cameo: 'var(--text-muted)' };
 const roleIcons: Record<string, React.ReactNode> = { protagonist: <User size={14} />, antagonist: <Swords size={14} />, supporting: <Users2 size={14} />, cameo: <Heart size={14} /> };
+const relTypes = ['家人', '朋友', '恋人', '仇敌', '师徒', '同门', '盟友', '其他'];
 
 export default function CharactersView() {
   const { characters, selectedId, loadCharacters, selectCharacter, addCharacter, updateCharacter, removeCharacter } = useCharacters();
@@ -16,6 +17,9 @@ export default function CharactersView() {
   const [search, setSearch] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<CharacterCard | null>(null);
+  const [newRelTarget, setNewRelTarget] = useState('');
+  const [newRelType, setNewRelType] = useState('朋友');
+  const [newRelDesc, setNewRelDesc] = useState('');
 
   useEffect(() => {
     if (currentWorkId) {
@@ -127,6 +131,122 @@ export default function CharactersView() {
             <input value={editData.characterArc} onChange={(e) => setEditData({ ...editData, characterArc: e.target.value })} placeholder="例如：从独善其身 → 肩负天下" className="w-full bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none mt-1" />
           </div>
 
+          {/* Relationships */}
+          <div>
+            <label className="text-xs text-[var(--text-muted)] flex items-center gap-1.5">
+              <Link2 size={12} /> 角色关系
+            </label>
+
+            {/* Existing relationships */}
+            {editData.relationships.length > 0 && (
+              <div className="space-y-2 mt-2 mb-3">
+                {editData.relationships.map((rel, i) => {
+                  const targetChar = characters.find((c) => c.id === rel.targetCharacterId);
+                  return (
+                    <div key={i} className="flex items-start gap-2 bg-[var(--bg-primary)] rounded-lg px-3 py-2 group">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-[var(--text-primary)]">
+                            {targetChar?.name || '未知角色'}
+                          </span>
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent-muted)] text-[var(--accent)]">
+                            {rel.type}
+                          </span>
+                        </div>
+                        {rel.description && (
+                          <p className="text-xs text-[var(--text-muted)] mt-0.5 truncate">{rel.description}</p>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          setEditData({
+                            ...editData,
+                            relationships: editData.relationships.filter((_, j) => j !== i),
+                          });
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-[var(--text-muted)] hover:text-[var(--danger)] transition-all flex-shrink-0"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Add new relationship */}
+            <div className="space-y-2 mt-2 bg-[var(--bg-primary)] rounded-lg p-3">
+              <select
+                value={newRelTarget}
+                onChange={(e) => setNewRelTarget(e.target.value)}
+                className="w-full bg-[var(--bg-tertiary)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)] outline-none"
+              >
+                <option value="">选择关联角色...</option>
+                {characters
+                  .filter((c) => c.id !== editData.id)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+              </select>
+              <div className="flex gap-1.5 flex-wrap">
+                {relTypes.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setNewRelType(t)}
+                    className={`px-2.5 py-1 rounded-full text-[10px] transition-all
+                      ${newRelType === t
+                        ? 'bg-[var(--accent)] text-black font-medium'
+                        : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)] hover:text-[var(--text-primary)]'
+                      }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input
+                  value={newRelDesc}
+                  onChange={(e) => setNewRelDesc(e.target.value)}
+                  placeholder="关系描述（可选）"
+                  className="flex-1 bg-[var(--bg-tertiary)] rounded-lg px-3 py-1.5 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && newRelTarget) {
+                      setEditData({
+                        ...editData,
+                        relationships: [
+                          ...editData.relationships,
+                          { targetCharacterId: newRelTarget, type: newRelType, description: newRelDesc },
+                        ],
+                      });
+                      setNewRelTarget('');
+                      setNewRelDesc('');
+                      setNewRelType('朋友');
+                    }
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (!newRelTarget) return;
+                    setEditData({
+                      ...editData,
+                      relationships: [
+                        ...editData.relationships,
+                        { targetCharacterId: newRelTarget, type: newRelType, description: newRelDesc },
+                      ],
+                    });
+                    setNewRelTarget('');
+                    setNewRelDesc('');
+                    setNewRelType('朋友');
+                  }}
+                  disabled={!newRelTarget}
+                  className="px-3 py-1.5 rounded-lg bg-[var(--accent)] text-black text-xs font-medium hover:bg-[var(--accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                >
+                  <Plus size={13} />
+                </button>
+              </div>
+            </div>
+          </div>
+
           <button onClick={() => { removeCharacter(editData.id); setIsEditing(false); setEditData(null); }}
             className="w-full py-2.5 rounded-lg border border-[var(--danger)]/30 text-[var(--danger)] text-sm hover:bg-[var(--danger)]/10 transition-colors">
             删除角色
@@ -205,6 +325,40 @@ export default function CharactersView() {
                           {selected.attributes.quirks.map((q, i) => (
                             <span key={i} className="px-2.5 py-1 text-xs rounded-md bg-[var(--bg-tertiary)] text-[var(--text-secondary)]">{q}</span>
                           ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {selected.relationships.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold text-[var(--text-muted)] uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                          <Link2 size={12} /> 角色关系
+                        </h4>
+                        <div className="space-y-2">
+                          {selected.relationships.map((rel, i) => {
+                            const targetChar = characters.find((c) => c.id === rel.targetCharacterId);
+                            return (
+                              <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg bg-[var(--bg-tertiary)]">
+                                <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm flex-shrink-0"
+                                  style={{ backgroundColor: `${roleColors[targetChar?.role || 'cameo']}20`, color: roleColors[targetChar?.role || 'cameo'] }}>
+                                  {targetChar?.name?.[0] || '?'}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium text-[var(--text-primary)]">
+                                      {targetChar?.name || '未知角色'}
+                                    </span>
+                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--accent-muted)] text-[var(--accent)]">
+                                      {rel.type}
+                                    </span>
+                                  </div>
+                                  {rel.description && (
+                                    <p className="text-xs text-[var(--text-muted)] mt-0.5">{rel.description}</p>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     )}

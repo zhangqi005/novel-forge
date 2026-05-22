@@ -5,9 +5,9 @@ import { useOutline } from '@/store/useOutline';
 import { useWorks } from '@/store/useWorks';
 import {
   Plus, ChevronRight, ChevronDown, Trash2, Edit3,
-  BookOpen, FileText, Layout, Check, X
+  BookOpen, FileText, Layout, Check, X, GripVertical, Eye, EyeOff
 } from 'lucide-react';
-import type { OutlineNode } from '@/types';
+import type { OutlineNode, Foreshadow } from '@/types';
 
 const typeLabels: Record<string, string> = { volume: '卷', chapter: '章', scene: '场景' };
 const typeIcons: Record<string, React.ReactNode> = { volume: <BookOpen size={13} />, chapter: <FileText size={13} />, scene: <Layout size={13} /> };
@@ -15,13 +15,18 @@ const statusColors: Record<string, string> = { planned: 'var(--text-muted)', wri
 const statusLabels: Record<string, string> = { planned: '计划', writing: '写作中', done: '已完成' };
 
 export default function OutlineView() {
-  const { outlineNodes, storylines, selectedNodeId, loadOutlines, loadStorylines, selectNode, addNode, updateNode, removeNode } = useOutline();
+  const { outlineNodes, storylines, selectedNodeId, loadOutlines, loadStorylines, selectNode, addNode, updateNode, removeNode, reorderNode } = useOutline();
   const currentWorkId = useWorks((s) => s.currentWorkId);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editSummary, setEditSummary] = useState('');
   const [editStatus, setEditStatus] = useState<OutlineNode['status']>('planned');
+  const [editForeshadows, setEditForeshadows] = useState<Foreshadow[]>([]);
+  const chapters = useWorks((s) => s.chapters);
+  const [dragNodeId, setDragNodeId] = useState<string | null>(null);
+  const [dragOverNodeId, setDragOverNodeId] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState<'above' | 'below'>('below');
 
   useEffect(() => {
     if (currentWorkId) {
@@ -38,6 +43,84 @@ export default function OutlineView() {
     });
   }, []);
 
+  const handleDragStart = useCallback((e: React.DragEvent, nodeId: string) => {
+    e.dataTransfer.setData('text/plain', nodeId);
+    e.dataTransfer.effectAllowed = 'move';
+    setDragNodeId(nodeId);
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent, nodeId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    setDragOverNodeId(nodeId);
+    setDragPosition(e.clientY < midY ? 'above' : 'below');
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setDragOverNodeId(null);
+  }, []);
+
+  const handleDrop = useCallback(async (e: React.DragEvent, targetNodeId: string) => {
+    e.preventDefault();
+    const draggedId = e.dataTransfer.getData('text/plain');
+    if (!draggedId || draggedId === targetNodeId) {
+      setDragNodeId(null);
+      setDragOverNodeId(null);
+      return;
+    }
+
+    const targetNode = outlineNodes.find((n) => n.id === targetNodeId);
+    const draggedNode = outlineNodes.find((n) => n.id === draggedId);
+    if (!targetNode || !draggedNode) {
+      setDragNodeId(null);
+      setDragOverNodeId(null);
+      return;
+    }
+
+    // Don't allow dropping onto a descendant
+    const isDescendant = (ancestorId: string, nodeId: string): boolean => {
+      const children = outlineNodes.filter((n) => n.parentId === ancestorId);
+      for (const child of children) {
+        if (child.id === nodeId) return true;
+        if (isDescendant(child.id, nodeId)) return true;
+      }
+      return false;
+    };
+    if (isDescendant(draggedId, targetNodeId)) {
+      setDragNodeId(null);
+      setDragOverNodeId(null);
+      return;
+    }
+
+    // Target stays in same parent
+    const newParentId = targetNode.parentId;
+    const siblings = outlineNodes
+      .filter((n) => n.parentId === newParentId)
+      .sort((a, b) => a.order - b.order);
+    const targetIndex = siblings.findIndex((n) => n.id === targetNodeId);
+    const newIndex = dragPosition === 'above' ? targetIndex : targetIndex + 1;
+
+    // If dragging within the same parent and the dragged node is before the target,
+    // adjust the index
+    const draggedOldIndex = siblings.findIndex((n) => n.id === draggedId);
+    let adjustedIndex = newIndex;
+    if (draggedOldIndex !== -1 && draggedOldIndex < targetIndex) {
+      adjustedIndex = Math.max(0, newIndex - 1);
+    }
+
+    await reorderNode(draggedId, newParentId, adjustedIndex);
+
+    setDragNodeId(null);
+    setDragOverNodeId(null);
+  }, [outlineNodes, dragPosition, reorderNode]);
+
+  const handleDragEnd = useCallback(() => {
+    setDragNodeId(null);
+    setDragOverNodeId(null);
+  }, []);
+
   const handleAdd = async (parentId: string | null, type: OutlineNode['type']) => {
     if (!currentWorkId) return;
     const node = await addNode(currentWorkId, parentId, type);
@@ -46,6 +129,7 @@ export default function OutlineView() {
     setEditTitle(node.title);
     setEditSummary('');
     setEditStatus('planned');
+    setEditForeshadows([]);
     setEditingId(node.id);
   };
 
@@ -53,6 +137,7 @@ export default function OutlineView() {
     setEditTitle(node.title);
     setEditSummary(node.summary);
     setEditStatus(node.status);
+    setEditForeshadows(node.foreshadows || []);
     setEditingId(node.id);
   };
 
@@ -60,7 +145,7 @@ export default function OutlineView() {
     if (!editingId || !editTitle.trim()) return;
     const node = outlineNodes.find((n) => n.id === editingId);
     if (!node) return;
-    await updateNode({ ...node, title: editTitle.trim(), summary: editSummary.trim(), status: editStatus });
+    await updateNode({ ...node, title: editTitle.trim(), summary: editSummary.trim(), status: editStatus, foreshadows: editForeshadows });
     setEditingId(null);
   };
 
@@ -88,11 +173,26 @@ export default function OutlineView() {
     const hasChildren = children.length > 0;
     const isEditing = editingId === node.id;
 
+    const isDragging = dragNodeId === node.id;
+    const isDragOver = dragOverNodeId === node.id;
+
     return (
       <div key={node.id}>
+        {/* Drop indicator line (above) */}
+        {isDragOver && dragPosition === 'above' && (
+          <div className="mx-3 h-0.5 bg-[var(--accent)] rounded-full" style={{ marginLeft: `${16 + depth * 18}px` }} />
+        )}
         <div
+          draggable
+          onDragStart={(e) => handleDragStart(e, node.id)}
+          onDragOver={(e) => handleDragOver(e, node.id)}
+          onDragLeave={handleDragLeave}
+          onDrop={(e) => handleDrop(e, node.id)}
+          onDragEnd={handleDragEnd}
           className={`flex items-center gap-1.5 py-1.5 px-2 mx-2 rounded-md cursor-pointer transition-colors group
-            ${selectedNodeId === node.id ? 'bg-[var(--accent-muted)]' : 'hover:bg-[var(--bg-tertiary)]'}`}
+            ${selectedNodeId === node.id ? 'bg-[var(--accent-muted)]' : 'hover:bg-[var(--bg-tertiary)]'}
+            ${isDragging ? 'opacity-40' : ''}
+            ${isDragOver && dragPosition === 'below' ? 'ring-2 ring-[var(--accent)]' : ''}`}
           style={{ paddingLeft: `${8 + depth * 18}px` }}
           onClick={() => selectNode(node.id)}
         >
@@ -104,6 +204,12 @@ export default function OutlineView() {
             <span className="w-[18px]" />
           )}
           <span className="text-[var(--text-muted)]">{typeIcons[node.type]}</span>
+
+          {!isEditing && (
+            <span className="hidden group-hover:inline text-[var(--text-muted)] cursor-grab active:cursor-grabbing">
+              <GripVertical size={12} />
+            </span>
+          )}
 
           {isEditing ? (
             <div className="flex-1 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
@@ -152,6 +258,84 @@ export default function OutlineView() {
               rows={2}
               className="w-full bg-[var(--bg-primary)] rounded-md px-3 py-2 text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none resize-none mb-2"
             />
+            {/* Foreshadows */}
+            <div className="mb-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] text-[var(--text-muted)] flex items-center gap-1">
+                  <Eye size={11} /> 伏笔 ({editForeshadows.length})
+                </span>
+                <button
+                  onClick={() => {
+                    setEditForeshadows([
+                      ...editForeshadows,
+                      { id: crypto.randomUUID(), description: '', plantedChapterId: '', status: 'planted' },
+                    ]);
+                  }}
+                  className="p-0.5 rounded text-[var(--text-muted)] hover:text-[var(--accent)] transition-colors"
+                >
+                  <Plus size={11} />
+                </button>
+              </div>
+              {editForeshadows.length > 0 && (
+                <div className="space-y-1.5">
+                  {editForeshadows.map((fs, i) => (
+                    <div key={fs.id} className="bg-[var(--bg-primary)] rounded-md p-2 space-y-1.5 group">
+                      <div className="flex items-start gap-1.5">
+                        <input
+                          value={fs.description}
+                          onChange={(e) => {
+                            const updated = [...editForeshadows];
+                            updated[i] = { ...fs, description: e.target.value };
+                            setEditForeshadows(updated);
+                          }}
+                          placeholder="伏笔描述..."
+                          className="flex-1 bg-transparent text-xs text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
+                        />
+                        <button
+                          onClick={() => setEditForeshadows(editForeshadows.filter((_, j) => j !== i))}
+                          className="opacity-0 group-hover:opacity-100 p-0.5 text-[var(--text-muted)] hover:text-[var(--danger)] transition-all flex-shrink-0"
+                        >
+                          <X size={11} />
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={fs.plantedChapterId}
+                          onChange={(e) => {
+                            const updated = [...editForeshadows];
+                            updated[i] = { ...fs, plantedChapterId: e.target.value };
+                            setEditForeshadows(updated);
+                          }}
+                          className="flex-1 bg-[var(--bg-tertiary)] rounded px-2 py-1 text-[10px] text-[var(--text-primary)] outline-none"
+                        >
+                          <option value="">选择埋设章节...</option>
+                          {chapters.map((ch) => (
+                            <option key={ch.id} value={ch.id}>{ch.title}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => {
+                            const updated = [...editForeshadows];
+                            updated[i] = { ...fs, status: fs.status === 'planted' ? 'resolved' : 'planted' as const };
+                            setEditForeshadows(updated);
+                          }}
+                          className={`flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all flex-shrink-0
+                            ${fs.status === 'resolved'
+                              ? 'bg-[var(--success)]/15 text-[var(--success)]'
+                              : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+                            }`}
+                          title={fs.status === 'planted' ? '点击标记为已回收' : '已回收'}
+                        >
+                          {fs.status === 'resolved' ? <EyeOff size={10} /> : <Eye size={10} />}
+                          {fs.status === 'planted' ? '已埋' : '已收'}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-1.5">
               <span className="text-[10px] text-[var(--text-muted)]">状态:</span>
               {(['planned', 'writing', 'done'] as const).map((s) => (

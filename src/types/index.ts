@@ -161,7 +161,7 @@ export interface Discussion {
 
 // ===== Workspace State =====
 
-export type PanelView = 'chapters' | 'characters' | 'outline' | 'storylines' | 'discussion';
+export type PanelView = 'chapters' | 'characters' | 'outline' | 'storylines' | 'discussion' | 'stats';
 
 export interface WorkspaceState {
   currentWorkId: string | null;

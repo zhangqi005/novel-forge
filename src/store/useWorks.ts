@@ -18,6 +18,7 @@ interface WorksStore {
   setCurrentWork: (id: string | null) => void;
   setCurrentChapter: (id: string | null) => void;
   updateChapterContent: (id: string, content: Record<string, unknown>, wordCount: number) => Promise<void>;
+  reorderChapters: (chapterId: string, newIndex: number) => Promise<void>;
 }
 
 export const useWorks = create<WorksStore>((set, get) => ({
@@ -29,7 +30,15 @@ export const useWorks = create<WorksStore>((set, get) => ({
 
   loadWorks: async () => {
     const works = await db.getAllWorks();
-    set({ works, isLoaded: true });
+    const { currentWorkId } = get();
+    // Auto-select first work if none is selected
+    const nextWorkId = currentWorkId ?? (works.length > 0 ? works[0].id : null);
+    set({ works, isLoaded: true, currentWorkId: nextWorkId });
+    // If we auto-selected a work, load its chapters too
+    if (nextWorkId && !currentWorkId) {
+      const chapters = await db.getChaptersByWork(nextWorkId);
+      set({ chapters: chapters.sort((a, b) => a.chapterNumber - b.chapterNumber) });
+    }
   },
 
   loadChapters: async (workId) => {
@@ -72,12 +81,34 @@ export const useWorks = create<WorksStore>((set, get) => ({
   },
 
   deleteWork: async (id) => {
+    // Delete work and all related data
     await db.deleteWork(id);
-    set((s) => ({
-      works: s.works.filter((w) => w.id !== id),
-      currentWorkId: s.currentWorkId === id ? null : s.currentWorkId,
-      chapters: s.currentWorkId === id ? [] : s.chapters,
-    }));
+    const chapters = await db.getChaptersByWork(id);
+    for (const ch of chapters) await db.deleteChapter(ch.id);
+    const chars = await db.getCharactersByWork(id);
+    for (const c of chars) await db.deleteCharacter(c.id);
+    const outlines = await db.getOutlinesByWork(id);
+    for (const o of outlines) await db.deleteOutline(o.id);
+    const storylines = await db.getStorylinesByWork(id);
+    for (const s of storylines) await db.deleteStoryline(s.id);
+    const remaining = get().works.filter((w) => w.id !== id);
+    const nextWorkId = get().currentWorkId === id ? (remaining.length > 0 ? remaining[0].id : null) : get().currentWorkId;
+    // If switching to a new work, load its chapters
+    if (nextWorkId && nextWorkId !== get().currentWorkId) {
+      const chapters = await db.getChaptersByWork(nextWorkId);
+      set({
+        works: remaining,
+        currentWorkId: nextWorkId,
+        chapters: chapters.sort((a, b) => a.chapterNumber - b.chapterNumber),
+        currentChapterId: chapters.length > 0 ? chapters[chapters.length - 1].id : null,
+      });
+    } else {
+      set((s) => ({
+        works: remaining,
+        currentWorkId: nextWorkId,
+        chapters: s.currentWorkId === id ? [] : s.chapters,
+      }));
+    }
   },
 
   createChapter: async (workId, title) => {
@@ -123,5 +154,25 @@ export const useWorks = create<WorksStore>((set, get) => ({
     set((s) => ({
       chapters: s.chapters.map((ch) => (ch.id === id ? updated : ch)),
     }));
+  },
+
+  reorderChapters: async (chapterId, newIndex) => {
+    const { chapters } = get();
+    const chapter = chapters.find((ch) => ch.id === chapterId);
+    if (!chapter) return;
+
+    const sorted = [...chapters].sort((a, b) => a.chapterNumber - b.chapterNumber);
+    const oldIndex = sorted.findIndex((ch) => ch.id === chapterId);
+    if (oldIndex === -1) return;
+
+    // Remove from old position and insert at new position
+    sorted.splice(oldIndex, 1);
+    sorted.splice(newIndex, 0, chapter);
+
+    // Reassign chapterNumbers
+    const updated = sorted.map((ch, i) => ({ ...ch, chapterNumber: i + 1 }));
+
+    await Promise.all(updated.map((ch) => db.saveChapter(ch)));
+    set({ chapters: updated });
   },
 }));

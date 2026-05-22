@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useDiscussion } from '@/store/useDiscussion';
+import { useWorks } from '@/store/useWorks';
 import { PRESET_AGENTS, streamAIResponse } from '@/lib/ai';
 import { Plus, Send, Users, Sparkles } from 'lucide-react';
 
@@ -11,6 +12,7 @@ export default function DiscussionView() {
     createDiscussion, selectDiscussion, addMessage, toggleAgent,
     isGenerating, setGenerating,
   } = useDiscussion();
+  const currentWorkId = useWorks((s) => s.currentWorkId);
 
   const [topicInput, setTopicInput] = useState('');
   const [messageInput, setMessageInput] = useState('');
@@ -19,8 +21,8 @@ export default function DiscussionView() {
 
   const handleCreate = () => {
     const topic = topicInput.trim();
-    if (!topic) return;
-    createDiscussion('default', topic);
+    if (!topic || !currentWorkId) return;
+    createDiscussion(currentWorkId, topic);
     setTopicInput('');
     setMessageInput('');
   };
@@ -81,8 +83,11 @@ export default function DiscussionView() {
         <h2 className="text-sm font-semibold text-[var(--text-secondary)] uppercase tracking-wider">灵感讨论室</h2>
       </div>
 
-      {/* Discussion List or Detail */}
-      {!currentDiscussion ? (
+      {!currentWorkId ? (
+        <div className="flex-1 flex items-center justify-center p-4">
+          <p className="text-xs text-[var(--text-muted)] text-center">请先创建作品</p>
+        </div>
+      ) : !currentDiscussion ? (
         <div className="flex-1 overflow-y-auto">
           {/* Agent selector */}
           <div className="p-3 border-b border-[var(--border-color)]">
@@ -128,7 +133,7 @@ export default function DiscussionView() {
               />
               <button
                 onClick={handleCreate}
-                disabled={!topicInput.trim()}
+                disabled={!topicInput.trim() || !currentWorkId}
                 className="px-4 rounded-lg bg-[var(--accent)] text-black font-medium text-sm hover:bg-[var(--accent-hover)] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
               >
                 开始
